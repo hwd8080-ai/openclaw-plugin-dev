@@ -295,8 +295,10 @@ const timer = setInterval(doWork, intervalMinutes * 60 * 1000);
 3. 构建：`node build.mjs`。
 4. 本地部署 + **daemon 重启 + 实际验证页面/接口**（发布前必须本地验证，确认无误）。
 5. 验证：`clawhub package validate .` → 必须 **0 错 0 警**。
-6. 发布：`clawhub package publish . --family bundle-plugin --owner <handle> --version <ver> --source-repo <repo> --source-commit $(git rev-parse HEAD)`（先加 `--dry-run` 确认，再正式；可加 `--changelog "..."`）。
-7. 提交 GitHub：注意 remote 名（`github` / `origin` 可能指向不同平台，别推错）；推送后 `clawhub package inspect` 确认 Latest = 新版本、Scan clean、moderation 通过（live）。
+6. **写 changelog**：维护 `CHANGELOG.md`（作为单一事实源），并提炼一段适合版本页的 release note。
+7. 发布：`clawhub package publish . --family bundle-plugin --owner <handle> --changelog "<release-note>" --source-repo <repo> --source-commit $(git rev-parse HEAD)`（先加 `--dry-run` 确认，再正式）。**`--changelog` 不是可选项，必须带；ClawHub 不允许修改已发布版本的 release note，漏填只能再升一个版本重发**。
+8. 提交 GitHub：注意 remote 名（`github` / `origin` 可能指向不同平台，别推错）；推送后 `clawhub package inspect` 确认 Latest = 新版本、Scan clean、moderation 通过（live）。
+   - 刚发布那几分钟 `Scan: suspicious` 是正常过渡态，约 10~15 分钟后会自动转 `clean`，和上一版行为一致；不必惊慌，但要复查确认。
 - 从零建公开仓库一步到位：`gh repo create <name> --public --source=. --remote=origin --push`（要求 `gh` 已登录且带 `repo` scope）；仓库只含源码，运行时 bundle 不入库（见第二章）。
 
 ### 常见 validate 警告
