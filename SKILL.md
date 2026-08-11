@@ -326,6 +326,7 @@ const timer = setInterval(doWork, intervalMinutes * 60 * 1000);
 - **绕过（不改代码）**：从菜单进入 / 切走再切回即可，功能正常只是首屏需一下。
 - **铁律：绝不修改 openclaw 主程序 / 源码**。sandbox 是 openclaw 刻意的安全设计（防插件逃逸、隔离宿主），不是 bug；即使有 UX 瑕疵，也由 openclaw 官方修复，插件侧不碰。改 `embedSandboxMode` 默认值、改 plugin-page 逻辑、重新打包 control-ui —— 都属于 fork 官方源码、越界且背离"用插件扩展而非改宿主"的初衷，绝不做。本插件（branding）对 control-ui 文件做 logo / 品牌字替换，是**插件既定目的（运行时换肤）**，与"修改宿主源码 / 安全逻辑"是两回事，不可混淆。
 - **无害残留**：strict 首屏 console 仍打一条 Blocked script 警告，页面功能不受影响。
+- **插件侧可做的缓解（推荐，不改宿主）**：在插件页 HTML 顶部加 `<noscript>` 提示块。机制——strict 沙箱（无 `allow-scripts`）下浏览器把该文档视为"脚本禁用"，`<noscript>` 内容**正好此时渲染**；正常沙箱下脚本跑起来，提示自动消失。于是冷刷新那个"静默坏页"窗口被变成一条清晰引导：「若按钮无响应，点左侧其他菜单再回到本页即可」。这等价于用户产品思路①（引导走菜单进入）的插件侧实现，不碰宿主、不破坏任何东西。注意：console 那条浏览器安全报错本身无法从插件消除（浏览器行为），只能靠 openclaw 官方修复；`<noscript>` 解决的是"坏页无提示"这一 UX，不是消除 console 噪声。
 
 ### 坑 #2：主题与国际化无法跟随 openclaw
 - 插件 iframe 由 openclaw 嵌入，其 `src` 仅带插件路径，**不传 theme/lang 参数**，也无 postMessage；沙盒 `scripts` 模式无 `allow-same-origin`，插件读不到 openclaw 的 DOM/localStorage/cookie。
