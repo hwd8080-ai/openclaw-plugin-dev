@@ -173,6 +173,44 @@ js.push("  box.innerHTML = '<div class=\"loading\">加载中...</div>';");
 - **操作后用户无感知是 iframe 插件通病**：不要只把结果打到隐藏较深的区块，要在操作按钮附近首屏可见处弹醒目反馈（成功绿/失败红），并明确告知下一步动作（如「按 Cmd+Shift+R 硬刷新」）。自动刷新父页面留作 best-effort（`window.top.location.reload()` 多数部署被 sandbox 静默拒绝）。
 - 视觉验证降级：openclaw 的 `sw.js` 把插件页 HTML 也 Cache Storage 缓存，egobrowser 截图常被旧 SW 挡；改用 `curl` 抓线上 HTML + `node --check` 文本核验最可靠（用户 `Cmd+Shift+R` 硬刷一次看真实效果）。
 
+### 五·之三：客户端抽屉要渲染 markdown / 用 npm 库——打包成 IIFE 内联（SSR 直接 import）
+
+插件 UI 常见两类渲染路径，对 npm 库的接入方式完全不同：
+
+1. **服务端渲染（SSR）/ 后端运行时**：`ui.ts` 在 Node 里跑，可直接 `import markdownit from "markdown-it"` 用 `md.render(t)`。最简单，无额外打包。
+2. **客户端抽屉（浏览器端内联 JS）**：浏览器脚本在 `<iframe sandbox="allow-scripts">` 里跑，**不能 `import` npm 模块**（没有打包器、没有 module 解析）。要把 npm 库送进浏览器，只能**用 esbuild 单独打包成 IIFE，挂到 `globalThis`，再内联进页面 `<script>`**。
+
+**双路径落地（以 markdown-it 为例，小包、XSS 安全）**：
+
+- 建一个浏览器入口 `mdClientEntry.ts`：
+  ```typescript
+  import markdownit from "markdown-it";
+  const md = markdownit({ html: false, linkify: true, breaks: true, typographer: false });
+  (globalThis as unknown as { MD: typeof md }).MD = md;  // 挂到 window.MD
+  ```
+- `build.mjs` 加一步 IIFE 构建（注意 `nodePaths` 指向 managed workspace 的 `node_modules`，否则 esbuild 解析不了 `markdown-it`；见下方坑）：
+  ```javascript
+  await build({
+    entryPoints: [path.join(__dirname, "mdClientEntry.ts")],
+    bundle: true, format: "iife", platform: "browser", target: "es2020",
+    nodePaths: [path.resolve(process.env.HOME, ".workbuddy/binaries/node/workspace/node_modules")],
+    outfile: path.join(distDir, "md-client.js"),
+  });
+  ```
+- SSR：列表/详情页直接 `mdServer.render(t)` 输出 HTML（同时 `<style>` 注入 markdown 样式）。
+- 客户端：内联 `<script>` 把 `dist/md-client.js` 内容塞进 `<head>`，抽屉里用 `window.MD.render(t)`；并保留一个正则 fallback 防库未加载：
+  ```javascript
+  function md(t){
+    if (!t) return '';
+    try { if (window.MD && typeof window.MD.render === 'function') return window.MD.render(t); } catch (e) {}
+    var s = esc(t); /* 回退：换行→<br>、URL→<a> */ return s;
+  }
+  ```
+  - ⚠️ 内联脚本里的 `</script>` 必须转义成 `<\/script>`，否则提前闭合标签。
+- **`.bubble` 样式切换**：从正则 `pre-wrap`（保留换行）切到 markdown-it 后，要把 `.bubble{white-space:pre-wrap}` 改成 `white-space:normal`——markdown-it 输出 block 元素（`<p>`/`<ul>`/`<li>`），pre-wrap 会额外多出空行。配套补一段 markdown 专属 CSS（`.bubble p/ul/ol/li/h1-4/blockquote/a/table/pre/code/img`）。
+- **XSS 安全**：markdown-it 配 `{html:false}`，默认转义原始 HTML（`<script>`、`<img onerror>` 等被转义成文本），客户端/服务端都安全，无需手动 sanitize。
+- **build.mjs 坑**：esbuild 默认只搜当前目录 `node_modules`，而 `markdown-it` 装在 **managed workspace**（`~/.workbuddy/binaries/node/workspace/node_modules`），插件目录里没有。必须把该路径加进 `nodePaths`（且**每个 build 调用都要带**，共用 config 对象时别漏）。装包：`cd ~/.workbuddy/binaries/node/workspace && npm install markdown-it`。
+
 ## 六、数据层：node:sqlite (DatabaseSync) 的坑
 
 Node ≥ 22.5 的 `DatabaseSync` 为实验 API，实测关键坑如下。
