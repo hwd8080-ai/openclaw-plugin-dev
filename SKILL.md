@@ -56,6 +56,7 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18789/plugins/<name>
 - 源码仓库**只含 TS 源码**：根 `index.mjs` 与 `dist/index.mjs` 是 esbuild 产物，**不入库**（`.gitignore` 配 `dist/`；根 `index.mjs` 也别提交）。外部 clone 后必须先 `node build.mjs` 再部署——README「安装」章节务必含此步，否则 clone 用户拿不到运行时文件。
 - **重启 daemon 前先清旧端口占用**：`openclaw daemon restart` 偶发起重进程失败（旧 gateway 仍占 `18789`，LaunchAgent 起重进程时旧进程还在服务旧代码）。稳妥写法：`kill $(lsof -iTCP:18789 -sTCP:LISTEN -t) 2>/dev/null; sleep 2; openclaw daemon restart; sleep 3`。
 - **运行时目录是 `~/.openclaw/extensions/<id>/`，不是 openclaw 源码仓库的 `extensions/`**（后者的几百个目录是仓库自带源码，运行时不加载）。
+- **插件运行时状态文件只放插件自己的扩展目录**（`~/.openclaw/extensions/<id>/` 下），**绝不往 openclaw 系统路径**（`~/.openclaw` 配置树、`agents/`、`sessions/`、daemon data 等）**里写**。例如换肤状态 `branding-state.json` 由 `path.dirname(fileURLToPath(import.meta.url))` 解析到扩展目录（若落在 `dist/` 再取父目录），并在 `.gitignore` 排除——纯运行时生成、随插件卸载一起消失、不污染 openclaw 本身。
 - **必须同时部署根目录 `index.mjs` 和 `dist/index.mjs`**：openclaw 默认加载扩展根目录的 `index.mjs`；只放 `dist/` 会导致 `plugin not found`（热重载日志报 `stale config entry ignored`）。
 - **必须在 `openclaw.json` 的 `plugins.entries` 显式启用**：未启用的扩展即使文件就位也不会被加载（日志直接报 `plugin not found`）。
 - Node ≥ 22.5（`node:sqlite` 要求，若插件用 SQLite）。
