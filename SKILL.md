@@ -383,6 +383,12 @@ const timer = setInterval(doWork, intervalMinutes * 60 * 1000);
 - 插件 iframe 由 openclaw 嵌入，其 `src` 仅带插件路径，**不传 theme/lang 参数**，也无 postMessage；沙盒 `scripts` 模式无 `allow-same-origin`，插件读不到 openclaw 的 DOM/localStorage/cookie。
 - 结论：插件**不能**跟随 openclaw 的明暗 / 语言。要跟必须改 openclaw 主程序把主题 / 语言传入 iframe（参数或 postMessage）。插件侧只能跟 OS 偏好（`prefers-color-scheme` / `navigator.language`），不等于 openclaw 开关。
 
+### 坑 #3：sandbox 禁用模态对话框（alert/confirm/prompt 全部失效）
+- **现象**：页内调用 `alert()` 不弹窗，console 报 `Ignored call to 'alert()'. The document is sandboxed, and the 'allow-modals' keyword is not set.`（`confirm`/`prompt` 同理）。
+- **根因**：插件 iframe 是 `sandbox="allow-scripts"`（无 `allow-modals`），浏览器一律忽略模态对话框调用。这是平台安全设计，插件侧改不了。
+- **替代方案（插件侧必须做）**：所有用户提示改用页面内非模态元素——错误用已有的 `.error-banner`（如 `#errorBox`，设置 `textContent` + `style.display='block'`），成功/提示用按钮附近的首屏可见 inline 文字。绝不在校验、确认、输入等处依赖 `alert/confirm/prompt`。
+- 排查技巧：`grep` 源码确认全程无 `alert(/confirm(/prompt(` 残留。
+
 ## 十一、调试技巧
 1. **构建验证**：`grep` `dist/index.mjs` 确认新函数/字符串已落地（注意 esbuild 可能把中文转成 `\uXXXX`，用 Python 解码核对）。
 2. **API 测试**：`curl http://127.0.0.1:18789/plugins/<name>/api/<endpoint>`。
