@@ -211,6 +211,19 @@ js.push("  box.innerHTML = '<div class=\"loading\">加载中...</div>';");
 - **XSS 安全**：markdown-it 配 `{html:false}`，默认转义原始 HTML（`<script>`、`<img onerror>` 等被转义成文本），客户端/服务端都安全，无需手动 sanitize。
 - **build.mjs 坑**：esbuild 默认只搜当前目录 `node_modules`，而 `markdown-it` 装在 **managed workspace**（`~/.workbuddy/binaries/node/workspace/node_modules`），插件目录里没有。必须把该路径加进 `nodePaths`（且**每个 build 调用都要带**，共用 config 对象时别漏）。装包：`cd ~/.workbuddy/binaries/node/workspace && npm install markdown-it`。
 
+### 五·之四：无限滚动分页渲染——必须增量插入，禁止整列表 innerHTML 重渲染
+
+聊天/列表页做"滚动到底/到顶自动加载下一页"时，**绝不能在每次分页返回后 `box.innerHTML = renderAll(currentList)` 整列表重渲染**。快速滚动会连续触发多次加载，每次都销毁并重建全部 DOM 节点 + 重设 scrollTop → 视觉**闪屏/抖动**；往回滚一下不触发加载就"正常"了，正是这个特征。
+
+**正确做法：增量 DOM 插入，只插入新批次的节点，保留已有节点。**
+- 客户端抽屉（浏览器端）用 `element.insertAdjacentHTML('beforeend'|'afterend'|'beforebegin', batchHtml)` 把新批次 HTML 拼进对应位置，**不碰已有节点**。
+- 维护日期分割线等需要跨批次连续性的状态：用 `topDate` / `bottomDate` 记录已渲染首尾消息的日期，新批次从对应日期续接（`buildBatchHtml(msgs, startLastDate)` 返回 `{html, lastDate}`）。
+- **顶部续接技巧（向上加载更早、prepend 到顶部）**：把新批次插到列表里**第一个 `.date-divider` 之前**（`firstDiv.insertAdjacentHTML('beforebegin', html)`）。这样无论新批次与现有顶部是否同一天，顶部那条分割线始终留在最顶，既不会出现跨页同日的"中间分割线"，也不会重复。若没有分割线则插到 `#msgTop` 之后。
+- 插入后用滚动高度差锚定视口，避免跳动：`prevH = box.scrollHeight; prevTop = box.scrollTop; /* 插入 */ box.scrollTop = prevTop + (box.scrollHeight - prevH);`（顶部 prepend 时尤其要，否则视口会跟着内容被顶下去）。
+- 底部 append 时若用户已在底部（`scrollTop + clientHeight >= scrollHeight - 2`）才 `scrollTop = scrollHeight` 钉到底；否则保持 `scrollTop` 不动，新内容在折叠线以下、无跳动。
+- `msgLoading` 守卫仍要有（加载中忽略滚动事件），保证分页请求串行、不重叠。
+- 首屏（offset 0）仍是整列表 `innerHTML` 一次（清空 loading 态），没问题——闪屏只来自后续每页的重复全量重渲染。
+
 ## 六、数据层：node:sqlite (DatabaseSync) 的坑
 
 Node ≥ 22.5 的 `DatabaseSync` 为实验 API，实测关键坑如下。
