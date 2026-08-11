@@ -8,6 +8,8 @@ agent_created: true
 
 基于多个 openclaw 插件的真实开发与发布经验总结。**适用于任意 openclaw 插件**（后台页面、API、定时任务、数据同步等），不绑定具体业务。按"新建 → 开发 → 调试 → 发布"一条线组织。
 
+> **总原则（最高优先级）：绝不修改 openclaw 主程序 / 源码。** openclaw 是成熟的宿主程序，其 sandbox、权限、iframe 策略等都是刻意的安全设计，不是 bug。做插件的目的就是用扩展机制在宿主**外面**做事，绝不可 fork 官方源码、重新打包 control-ui、改动 `embedSandboxMode` / plugin-page / 安全逻辑来"修"宿主 UX。宿主若有问题（如冷刷新的 sandbox 竞态），只能报到 openclaw 官方由其修复。branding 插件对 control-ui 文件做 logo / 品牌字替换，是**插件既定目的（运行时换肤）**，与"修改宿主源码 / 安全逻辑"是两回事，不可混淆——后者一律禁止。
+
 ## 一、插件项目结构（通用模板）
 
 ```
@@ -322,6 +324,7 @@ const timer = setInterval(doWork, intervalMinutes * 60 * 1000);
 - **根治（推荐，见第五章 SSR）**：服务端渲染数据进 HTML，导航/筛选/导出/同步全用 `<a>` 链接或链接参数，脚本仅增强。strict 沙盒只禁脚本，静态 HTML + 链接导航可用，首屏硬刷新也完整可用。
 - **不要做**：`<meta http-equiv="refresh">` 自愈——strict 沙盒连 meta 刷新导航也拦，死路。
 - **绕过（不改代码）**：从菜单进入 / 切走再切回即可，功能正常只是首屏需一下。
+- **铁律：绝不修改 openclaw 主程序 / 源码**。sandbox 是 openclaw 刻意的安全设计（防插件逃逸、隔离宿主），不是 bug；即使有 UX 瑕疵，也由 openclaw 官方修复，插件侧不碰。改 `embedSandboxMode` 默认值、改 plugin-page 逻辑、重新打包 control-ui —— 都属于 fork 官方源码、越界且背离"用插件扩展而非改宿主"的初衷，绝不做。本插件（branding）对 control-ui 文件做 logo / 品牌字替换，是**插件既定目的（运行时换肤）**，与"修改宿主源码 / 安全逻辑"是两回事，不可混淆。
 - **无害残留**：strict 首屏 console 仍打一条 Blocked script 警告，页面功能不受影响。
 
 ### 坑 #2：主题与国际化无法跟随 openclaw
