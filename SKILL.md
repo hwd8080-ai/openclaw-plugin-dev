@@ -92,6 +92,9 @@ export default definePluginEntry({
 - **`register(api)` 必须按 `api.registrationMode` 分支**：discovery/tool-discovery 模式下 OpenClaw 会执行入口模块建快照，**顶层 import 必须无副作用**（禁止顶层启动网络客户端/子进程/DB 连接/监听器/读凭据），重活放进 handler 或按 mode 跳过。
 - `handler` 返回 `Promise<boolean>`，**必须 `return true`**，否则请求漏到后续中间件 → 404。
 - `manifest id` 必须与入口 `id` 一致；`contracts.tools` 必须与 `api.registerTool` 注册的名字一致（否则 tool discovery 不加载）。
+- **注册钩子 `api.registerHook(events, handler, opts)` 第三参 `opts` 必须带 `name`**（如 `{ name: "<id>:my-hook" }`）。缺失 name 时内部 `requireRegistrationValue` 抛 `hook registration missing name`，该异常会**中断 `register(api)`**，导致之后的 `registerHttpRoute` / `registerControlUiDescriptor` 全部不执行 → 管理页 404、gateway 启动列表（"http server listening (N plugins: …)"）不出现本插件。踩坑实例：openclaw-tweaks 首版只用 `api.registerHook("inbound_claim", handler)` 漏了 name，daemon 加载后插件 `inspect` 显示 loaded、但路由 404，直到在 SDK 源码 `registry.ts` 的 `registerHook` 里定位到 name 必填才修好。
+- **对话类钩子（`inbound_claim`/`message_received` 等）对非 bundled 插件额外要求信任授权**：必须在 `openclaw.json` 的 `plugins.entries.<id>.hooks` 设 `allowConversationAccess:true`（注入回复/改写消息还要 `allowPromptInjection:true`），否则被**静默拦截**（只 push warn 不注册、不抛异常）。bundled 插件不受此限。
+- **mock-import 测试（stub `openclaw` SDK）发现不了上述两类问题**：stub 不校验 name、也不做 conversation-access 拦截，钩子永远"成功"。验证钩子类插件必须**真 daemon 加载**（看 gateway 日志的 "http server listening" 列表是否含本插件 + 有无 `blocked`/`missing name` warn），或读 `openclaw/plugin-sdk` 源码确认签名与门控。
 - import 用窄路径 `openclaw/plugin-sdk/<subpath>`，别混用、别从 SDK 路径 import 自己的插件。
 - CORS 仍要自己加（见第二部分坑#1）。
 
