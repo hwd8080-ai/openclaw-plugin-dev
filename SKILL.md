@@ -312,10 +312,14 @@ if (pathname === "/plugins/<name>/api/items" && req.method === "GET") {
 - 区分两层：**registry 同步**（轻量，近实时，让新行立刻出现）vs **全量内容同步**（重，定时/手动触发，拉消息体）。两者频率不同，别混为一谈。
 
 ## 八、定时任务
+
 ```typescript
 const timer = setInterval(doWork, intervalMinutes * 60 * 1000);
-// 插件激活时启动；停用/卸载时 clearInterval 清理，避免泄漏
 ```
+
+> openclaw 的 extension 型插件**没有 `onDisable`/`onUnload` 生命周期钩子**（channel 型插件才有 `lifecycle.onAccountRemoved` 等）。删除插件或 disable 后 `setInterval` **不会自动停**——定时器只在 daemon 进程退出时自然释放。
+>
+> **安全的做法**：在 `setInterval` 回调里自己判断是否需要停止（例如检查文件是否存在、配置是否变化），或明确告知用户「修改插件配置后需 `openclaw daemon restart`」。不要在模块顶层写无法自行退出的无限循环定时器。
 
 ## 九、发布到 ClawHub
 
