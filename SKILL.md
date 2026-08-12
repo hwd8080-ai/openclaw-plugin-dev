@@ -88,8 +88,11 @@ export default definePluginEntry({
   },
 });
 ```
-- 入口必须 `definePluginEntry` 包裹；路由用 `a.registerHttpRoute`（不是旧的 `api.registerRoute`）。
+- 入口 helper 按类型选：非通道插件（provider/tool/hook/管理页+API）用 `definePluginEntry`；**通道插件**用 `defineChannelPluginEntry`（`openclaw/plugin-sdk/channel-core`，自动处理 discovery 分支）；纯工具插件可用 `defineToolPlugin`（`openclaw/plugin-sdk/tool-plugin`）。
+- **`register(api)` 必须按 `api.registrationMode` 分支**：discovery/tool-discovery 模式下 OpenClaw 会执行入口模块建快照，**顶层 import 必须无副作用**（禁止顶层启动网络客户端/子进程/DB 连接/监听器/读凭据），重活放进 handler 或按 mode 跳过。
 - `handler` 返回 `Promise<boolean>`，**必须 `return true`**，否则请求漏到后续中间件 → 404。
+- `manifest id` 必须与入口 `id` 一致；`contracts.tools` 必须与 `api.registerTool` 注册的名字一致（否则 tool discovery 不加载）。
+- import 用窄路径 `openclaw/plugin-sdk/<subpath>`，别混用、别从 SDK 路径 import 自己的插件。
 - CORS 仍要自己加（见第二部分坑#1）。
 
 ### 5. 构建产物（发布前必生成）
@@ -98,7 +101,7 @@ NODE_PATH=<npm_workspace>/node_modules <node22+> node build.mjs
 ```
 - esbuild 把 `index.ts` + 依赖打成自包含 `dist/index.mjs`（运行时**不 npm install**，依赖须 bundled）。
 - `dist/` 与根 `index.mjs` gitignore 不入库；但 ClawHub `publish` 扫工作目录**不读 .gitignore**，发布前必须先构建让 dist/ 存在。
-- Node ≥ 22.5（用 node:sqlite 时）。
+- Node ≥ 22.22.3（或 24.15+/25.9+，官方要求）；用 node:sqlite 时需 ≥22.5。
 
 ### 6. 本地验证 + 调试
 ```bash
@@ -137,11 +140,14 @@ clawhub package publish . --family bundle-plugin --owner <handle> \
 - 必填字段：`openclaw.build.openclawVersion`、`openclaw.compat.pluginApi`、`install.clawhubSpec`。
 - `--changelog` 必带（已发布版本不可改 note，漏填只能再升版本重发）。
 
-**版本号规则（对齐官方 `<base>-<tag>.<n>` 模式）— 用 `YYYY.M.D-rc.N`**：
+**版本号规则（对齐官方 `<base>-<tag>.<n>` 模式）— 用 `YYYY.M.D-rc.N` / `-beta.N`**：
+- **semver 优先级（ClawHub 实测走严格 semver，不要用 GitHub tag 截图判断）**：同一核心版本下，预发布恒低于稳定版——
+  `2026.8.13-beta.1` < `2026.8.13-beta.2` < `2026.8.13-rc.1` < `2026.8.13`(裸稳定)。
+  所以 **想用 `-beta`/`-rc` 风格，必须先把预发布发出来，再毕业到裸稳定**；一旦发了裸 `2026.8.13`，就再也回不去 `2026.8.13-*` 的任何后缀（更小 → 被拒）。官方 OpenClaw 仓库的 `v2026.7.1-1`/`v2026.7.1-2` 是 GitHub 自己的 tag 排序习惯，**不等于 ClawHub 优先级**，实测 `-rc.1` 后缀会被当成更小值拒绝。
 - 当天首次：`2026.8.15-rc.1`；同一天再发：`-rc.2`、`-rc.3`（prerelease 段递增，semver 内更大）。
 - 次日：`2026.8.16-rc.1`（patch 更大，天然 > 前一天所有 rc）。
-- **不要用裸日期** `YYYY.M.D`：semver 下裸版本 > 同号任何 prerelease，发了裸 `2026.8.14` 后同天 `-rc.1` 会被 ClawHub 拒（更小），被迫写明天 → 不合实际。
-- 新版本必须 > 线上 Latest，否则被拒。
+- **不要先发裸日期** `YYYY.M.D`：发了裸 `2026.8.14` 后，同核心的 `-rc.1`/`-beta.1` 都比它小 → 被 ClawHub 拒，被迫跳到明天版本 → 不合实际。
+- 新版本必须 > 线上 Latest，否则被拒（用 `clawhub package inspect` 先看 Latest）。
 
 ### 9. 发完验证
 ```bash
