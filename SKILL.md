@@ -59,7 +59,8 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18789/plugins/<name>
 - **重启 daemon 前先清旧端口占用**：`openclaw daemon restart` 偶发起重进程失败（旧 gateway 仍占 `18789`，LaunchAgent 起重进程时旧进程还在服务旧代码）。稳妥写法：`kill $(lsof -iTCP:18789 -sTCP:LISTEN -t) 2>/dev/null; sleep 2; openclaw daemon restart; sleep 3`。
 - **运行时目录是 `~/.openclaw/extensions/<id>/`，不是 openclaw 源码仓库的 `extensions/`**（后者的几百个目录是仓库自带源码，运行时不加载）。
 - **插件运行时状态文件只放插件自己的扩展目录**（`~/.openclaw/extensions/<id>/` 下），**绝不往 openclaw 系统路径**（`~/.openclaw` 配置树、`agents/`、`sessions/`、daemon data 等）**里写**。例如换肤状态 `branding-state.json` 由 `path.dirname(fileURLToPath(import.meta.url))` 解析到扩展目录（若落在 `dist/` 再取父目录），并在 `.gitignore` 排除——纯运行时生成、随插件卸载一起消失、不污染 openclaw 本身。
-- **必须同时部署根目录 `index.mjs` 和 `dist/index.mjs`**：openclaw 默认加载扩展根目录的 `index.mjs`；只放 `dist/` 会导致 `plugin not found`（热重载日志报 `stale config entry ignored`）。
+- **必须同时部署根目录 `index.mjs` 和 `dist/index.mjs`**：openclaw 默认加载扩展根目录的 `index.mjs`；只放 `dist/` 会导致 `plugin not found`（热重载日志报 `stale config entry ignored`）。注意 `dist/index.mjs` 要拷到扩展目录的 `dist/` 子目录下，而不是和根 `index.mjs` 平级；拷错位置会让 openclaw 继续serve旧的 `dist/index.mjs`。
+- **部署后立即双验**：`grep` 扩展目录的 `index.mjs` 与 `dist/index.mjs`，确认关键字符串已更新；再 curl  served HTML/JS 验证。
 - **必须在 `openclaw.json` 的 `plugins.entries` 显式启用**：未启用的扩展即使文件就位也不会被加载（日志直接报 `plugin not found`）。
 - Node ≥ 22.5（`node:sqlite` 要求，若插件用 SQLite）。
 - stderr 被丢到 /dev/null（见 plist `StandardErrorPath`），插件加载期报错看不到，排错看 `~/.openclaw/...` 不行时改用 `~/Library/Logs/openclaw/gateway.log`（stdout）。
@@ -378,6 +379,11 @@ const timer = setInterval(doWork, intervalMinutes * 60 * 1000);
 - **铁律：绝不修改 openclaw 主程序 / 源码**。sandbox 是 openclaw 刻意的安全设计（防插件逃逸、隔离宿主），不是 bug；即使有 UX 瑕疵，也由 openclaw 官方修复，插件侧不碰。改 `embedSandboxMode` 默认值、改 plugin-page 逻辑、重新打包 control-ui —— 都属于 fork 官方源码、越界且背离"用插件扩展而非改宿主"的初衷，绝不做。本插件（branding）对 control-ui 文件做 logo / 品牌字替换，是**插件既定目的（运行时换肤）**，与"修改宿主源码 / 安全逻辑"是两回事，不可混淆。
 - **无害残留**：strict 首屏 console 仍打一条 Blocked script 警告，页面功能不受影响。
 - **插件侧可做的缓解（推荐，不改宿主）**：在插件页 HTML 顶部加 `<noscript>` 提示块。机制——strict 沙箱（无 `allow-scripts`）下浏览器把该文档视为"脚本禁用"，`<noscript>` 内容**正好此时渲染**；正常沙箱下脚本跑起来，提示自动消失。于是冷刷新那个"静默坏页"窗口被变成一条清晰引导：「若按钮无响应，点左侧其他菜单再回到本页即可」。这等价于用户产品思路①（引导走菜单进入）的插件侧实现，不碰宿主、不破坏任何东西。注意：console 那条浏览器安全报错本身无法从插件消除（浏览器行为），只能靠 openclaw 官方修复；`<noscript>` 解决的是"坏页无提示"这一 UX，不是消除 console 噪声。
+- **⚠️ noscript 方案的致命实现坑（已踩过，必读）**：配套要用 `.app{display:none}` + 末尾 reveal 脚本 `getElementById('app').style.display='flex'`。**两个必错点**：
+  1. **被显示的容器必须真的有 `id="app"`**。SSR 里 `<main class="app">` 只写 `class` 没写 `id` → `getElementById('app')` 返回 `null` → 脚本抛 `Uncaught TypeError: Cannot read properties of null (reading 'style')` → reveal 没跑 → `.app` 永远 `display:none` → **整页空白**。务必写 `<main class="app" id="app">`。
+  2. **reveal 脚本一律防御式写**：`var _app=document.getElementById('app'); if(_app){_app.style.display='flex';}`。绝不要裸 `getElementById('app').style...`，否则任何拿不到元素的情况都整页崩。
+  - 做法总结：SSR 两页（列表/详情）都在 `<main>` 加 `id="app"` 并在 `</body>` 前放防御式 inline `<script>` reveal；客户端 bundle 末尾也放同款防御式 reveal。沙箱禁脚本时 `.app` 保持隐藏 + `<noscript>` 提示呈现，脚本可用时正常显示。
+  - **📦 直接复用现成代码**：`references/sandbox-noscript-guide.md` 提供了**可直接粘贴**的 CSS + noscript HTML（含「温馨提示」标题与**纯 CSS 中英文切换**，沙盒禁脚本时也能切语言，无需 JS）+ 防御式 reveal 脚本，以及 6 条致命坑清单。开发任何 openclaw 插件页时，把这套代码和逻辑贴进去即可，不必重新推导。
 
 ### 坑 #2：主题与国际化无法跟随 openclaw
 - 插件 iframe 由 openclaw 嵌入，其 `src` 仅带插件路径，**不传 theme/lang 参数**，也无 postMessage；沙盒 `scripts` 模式无 `allow-same-origin`，插件读不到 openclaw 的 DOM/localStorage/cookie。
@@ -389,7 +395,79 @@ const timer = setInterval(doWork, intervalMinutes * 60 * 1000);
 - **替代方案（插件侧必须做）**：所有用户提示改用页面内非模态元素——错误用已有的 `.error-banner`（如 `#errorBox`，设置 `textContent` + `style.display='block'`），成功/提示用按钮附近的首屏可见 inline 文字。绝不在校验、确认、输入等处依赖 `alert/confirm/prompt`。
 - 排查技巧：`grep` 源码确认全程无 `alert(/confirm(/prompt(` 残留。
 
-## 十一、调试技巧
+## 十一、浏览器缓存与 Service Worker 调试（实战：branding 头像闪烁）
+
+> **经验法则（用户强调，最高优先）**：遇到实在查不动的浏览器侧问题（缓存、Service Worker、渲染、鉴权态、跨域等），**不要只在 DevTools 看 Network 干猜，直接用 ego-browser 真实浏览器实测**——它能构造缓存/复现症状/验证清除，是这类顽固问题的决定性武器。本次头像闪烁 bug 前两轮都因「没用真实浏览器验证 SW 缓存是否被清」而误判已修好，第三轮靠 ego-browser 才彻底坐实修复。
+>
+> openclaw-branding「换头像后切会话正常、刷新闪回旧头像」bug 的完整复盘就是范例。**核心方法论可迁移到任意 web 缓存 / SW 问题**：用真实浏览器构造旧缓存 → 复现 → 注入修复 → 验证清除，形成闭环证据。
+
+### 三条彼此独立的缓存通道（必须分别处理）
+
+「URL 没变就命中旧字节」可能来自任意一层，任何一层没管住都会复发：
+
+1. **HTTP 缓存（Cache-Control / fetch cache 选项）**：常规 `cache:'no-cache'|'reload'` 能管，但**不覆盖下面两类**。
+2. **Service Worker fetch cache（Cache Storage）**：SW `fetch` handler 写入的 `caches.open(...).put(...)`。**SW 接管前写入的旧缓存，新 SW 不删就永久沉积**。
+3. **浏览器 favicon 独立缓存**：`<link rel="icon">` / `<link rel="apple-touch-icon">` 走**浏览器内置 favicon 缓存，不遵守 Cache-Control 与 fetch cache 选项**——URL 不变就显示历史字节。**唯一根治手段是让 URL 变化（`?v=stamp`）**。
+
+### 层进式排查（4 个 root cause，逐个打穿）
+
+症状：A→B→C 换头像（无还原）→ 切会话显示 C → **普通刷新闪回 B**。
+
+| 轮次 | 当时假设 | 实际根因（本轮才看清） | 修复 |
+|------|---------|----------------------|------|
+| 1 | branding 4 图标缓存 | 漏了 chat 头像走**独立通道** `/avatar/{agentId}`，与 branding 4 图标无关 | SW 把 `/avatar/` 加 no-store 白名单 |
+| 2 | favicon + `/avatar/` 都加 no-store | SW `activate` 只删 `openclaw-control-*` 前缀，openclaw 原始 SW 的 `CACHE_PREFIX` 不一定以该前缀开头 → 旧缓存清不掉 | `activate` 改为删【所有】非当前缓存 |
+| 3 | 删了所有旧缓存 | 头像 fetch 失败 `.catch(()=>caches.match())` 回退 cacheStorage 吐旧字节 | 失败直接 `502`，**绝不读旧缓存** |
+
+**关键教训**：
+
+- **chat 头像 ≠ branding 图标，是两条独立字节通道**。chat 头像由 SPA bundle（如 `chat-page-*.js` 的 `Ai(e)`）先 `fetch('/avatar/{id}?meta=1')` 拿 `avatarUrl`，再 `fetch('/avatar/main')` 带鉴权 token → `response.blob()` → `URL.createObjectURL` → `<img src>`。它**完全不经过** branding 的 4 图标文件，也不走 `<link rel>`。**只修 branding 图标永远覆盖不到 chat 头像**。
+- **SW `CACHE_PREFIX` 陷阱**：别假设历史缓存都以你插件前缀开头。openclaw 原始 SW 的 `CACHE_PREFIX` 可能用别的命名；只删自己前缀 = 清不掉沉积旧字节。正确做法：`cacheKeys.filter(k => k !== CACHE_NAME)` 删全部（除当前缓存外的所有缓存）。
+- **SW fetch 失败绝不能 fallback 到 `caches.match`**：一旦失败回退旧缓存，就等于「刷新时偶尔吐旧头像」。favicon/avatar 这类**来源唯一、不应有旧值**的资源，fetch 失败就直接 `502`（让页面显示破图/占位），**绝不读旧缓存**。
+
+### stampSwCache 关键改动（index.ts）
+
+```typescript
+// activate：删掉除当前缓存外的【所有】缓存（覆盖任何原始前缀）
+const controlKeys = cacheKeys.filter((key) => key !== CACHE_NAME);
+
+// 头像/favicon 分支：识别 4 图标 或 url.pathname.startsWith("/avatar/")
+if (__brandIsFavicon) {
+  event.respondWith(
+    fetch(event.request, { cache: "no-store" })
+      .then((r) => {
+        if (!r || !r.ok) return new Response("...", { status: r ? r.status : 502 });
+        const h = new Headers(r.headers);
+        h.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+        h.set("Pragma", "no-cache");
+        return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
+      })
+      .catch(() => new Response("avatar/favicon fetch failed", { status: 502 })), // 绝不 caches.match
+  );
+  return;
+}
+```
+
+同时给 `index.html` 的 `<link rel>` href 注入 `?v=brandStamp`、给 SPA bundle 的 URL 拼装函数（如 `st()`）注入 `?v=window.__brandStamp`，让 favicon URL 变化失效浏览器内置缓存。
+
+### ego-browser 真实浏览器实测闭环（决定性证据）
+
+光改代码不算完，**必须用真实浏览器验证 SW 真的接管并清空了旧缓存**。用 `/egobrowser`（真实 Chromium）走闭环：
+
+1. **复现**：页面内 `js()` 执行 `await caches.open('openclaw-control-stale-B').put('/avatar/main', new Response(fakePng))` 构造旧缓存 → `await caches.match('/avatar/main')` 返回命中（= 复现「刷新回 B」症状）。
+2. **注入修复**：改磁盘 `sw.js`（升 stamp）触发新 SW 接管（`skipWaiting` + `clients.claim` 已有）。
+3. **验证清除**：`cdp('Page.reload')` 重载 → 再查 `await caches.match('/avatar/main')` 返回 `false`、`caches.keys()` 已无 `stale-B`、SW 不再把 `/avatar` 写进缓存、`img.chat-avatar` 的 `naturalWidth > 0`（非 502）。
+4. **确认 SW 内容**：`curl` 抓线上 `sw.js` 确认含 `key !== CACHE_NAME` / `avatar/favicon fetch failed`。
+
+> **ego-browser 原生 API 提示**：`waitForTimeout` / `evaluate` 未导出，改用 `js()`（页内执行）/ `cdp()`（如 `Page.reload`）/ `sleep`。裸 `fetch('/avatar/main')` 会 401（需 SPA 鉴权 token，存于 `localStorage["openclaw.device.auth.v1"]`），所以验证头像要用**页面内带 token 的探针**，或直接在 DOM 上查 `img.naturalWidth`。
+
+### 给用户的一次性硬复位指引（关键）
+
+新 SW 必须**真正接管**才能清掉旧缓存。若单纯 `Cmd+Shift+R` 无效（旧 SW 仍控制页面）：
+
+> 关掉所有 openclaw 标签页 → F12 → Application → Storage → 点「Clear site data」（或 Service Workers → Unregister）→ 重开页面。之后头像永远是新值。
+
+## 十二、调试技巧
 1. **构建验证**：`grep` `dist/index.mjs` 确认新函数/字符串已落地（注意 esbuild 可能把中文转成 `\uXXXX`，用 Python 解码核对）。
 2. **API 测试**：`curl http://127.0.0.1:18789/plugins/<name>/api/<endpoint>`。
 3. **DB 检查**：Python `sqlite3` 直接读 `.db` 文件。
