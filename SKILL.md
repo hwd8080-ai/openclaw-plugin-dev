@@ -12,6 +12,21 @@ agent_created: true
 
 > **官方文档（schema/SDK 先查）**：开发 https://docs.openclaw.ai/plugins/building-plugins ｜ manifest https://docs.openclaw.ai/plugins/manifest ｜ SDK 入口 https://docs.openclaw.ai/plugins/sdk-entrypoints ｜ ClawHub https://docs.openclaw.ai/clawhub 。本 skill 是 v2026.7.1 实测流水线，字段以官方为准。
 
+> **广度说明**：本 skill 以"真实插件实测流水线"为核心（tool 插件 → 构建 → 本地验证 → GitHub → ClawHub → 发完验证），同时把官方 17 篇插件文档按主题梳理进 `references/`，覆盖四种插件形态、清单全字段、钩子与权限、安装与依赖、架构与加载、构建与发布。**先看下面的索引挑主题，再读对应 reference 文件**（每个知识点都标了官方出处链接）。
+
+## 〇、参考文档索引（按主题，每条标注官方出处）
+
+| 主题 | 文件 | 覆盖内容 |
+|---|---|---|
+| 插件形态与清单 | `references/plugin-forms-and-manifest.md` | 四种形态（tool/channel/provider/cli-backend）、原生 vs bundle、入口 API、manifest 字段表、package.json openclaw 块、capability 模型、工具注册 |
+| 钩子与权限 | `references/hooks-and-permissions.md` | typed hooks（api.on vs registerHook）、钩子目录、before_tool_call、权限请求 vs 可选工具 vs Exec 审批 vs Codex 原生权限、对话访问门控 |
+| 安装与依赖 | `references/install-and-dependencies.md` | 安装来源（clawhub:/npm:/git:/npm-pack:/local/marketplace）、依赖解析（deps 进 dependencies 非 devDependencies）、安装覆盖、社区/市场、管理插件 |
+| 架构与加载 | `references/architecture-and-loading.md` | 四层架构、加载流水线、注册表模型、清单优先、缓存边界、Gateway HTTP 路由、SDK 导入子路径、信任模型、形态分类 |
+| 构建与发布 | `references/build-and-publish.md` | 构建（esbuild）、clawhub publish/validate/inspect、npm-pack 验收、内置插件清单、bundle 形式 |
+| 沙盒陷阱（既有） | `references/sandbox-noscript-guide.md` | iframe sandbox 竞态、CORS、模态框、主题/i18n 不跟随等运行时坑 |
+
+> 官方文档底稿（17 篇，已抓回本地）：`.workbuddy/research/01-*.txt` … `17-*.txt`，文件名序号 ↔ 链接见各 reference 文件顶部的"来源"标注。
+
 ## 一、开发生产线
 
 ### 1. 明确插件目的
