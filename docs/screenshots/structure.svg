@@ -1,0 +1,17 @@
+<svg viewBox="0 0 680 460" width="100%" xmlns="http://www.w3.org/2000/svg">
+<rect width="680" height="460" fill="#0d1117"/>
+<text x="340" y="34" text-anchor="middle" font-family="'PingFang SC','Microsoft YaHei',monospace" font-size="14" font-weight="500" fill="#e6edf3">Skill 目录结构</text>
+<rect x="40" y="54" width="600" height="376" rx="10" fill="#161b22" stroke="#30363d" stroke-width="0.5"/>
+<text x="70" y="92" font-family="monospace" font-size="13" fill="#79c0ff" font-weight="500">openclaw-plugin-dev/</text>
+<text x="70" y="120" font-family="monospace" font-size="13" fill="#79c0ff">  SKILL.md          ← 始终加载：实战流水线 + 参考索引</text>
+<text x="70" y="148" font-family="monospace" font-size="13" fill="#c9d1d9">  README.md / README.en.md</text>
+<text x="70" y="176" font-family="monospace" font-size="13" fill="#c9d1d9">  references/</text>
+<text x="70" y="204" font-family="monospace" font-size="13" fill="#c9d1d9">    plugin-forms-and-manifest.md</text>
+<text x="70" y="232" font-family="monospace" font-size="13" fill="#c9d1d9">    hooks-and-permissions.md</text>
+<text x="70" y="260" font-family="monospace" font-size="13" fill="#c9d1d9">    install-and-dependencies.md</text>
+<text x="70" y="288" font-family="monospace" font-size="13" fill="#c9d1d9">    architecture-and-loading.md</text>
+<text x="70" y="316" font-family="monospace" font-size="13" fill="#c9d1d9">    build-and-publish.md</text>
+<text x="70" y="344" font-family="monospace" font-size="13" fill="#c9d1d9">    sandbox-noscript-guide.md</text>
+<text x="70" y="372" font-family="monospace" font-size="13" fill="#8b949e">  scripts/</text>
+<text x="70" y="400" font-family="monospace" font-size="13" fill="#8b949e">  docs/screenshots/</text>
+</svg>
