@@ -92,37 +92,3 @@ api.onConversationBindingResolved(async (event) => {
 
 > 来源：https://docs.openclaw.ai/zh-CN/plugins/architecture-internals
 
----
-
-## 7. 实用钩子模式（吸收自社区同名 skill `openclaw-plugin-dev`，作者 cicadaFang）
-
-> 社区同名 skill 偏 hook 型插件指南，且其中 manifest 示例（`"main": "index.ts"`、`"version"` 字段）与真实 `openclaw.plugin.json` schema **不符**（正确格式见 `plugin-forms-and-manifest.md` 与 `SKILL.md` 第 3 节），**切勿照抄其 manifest / 入口示例**。下面几个**运行期模式**是正确的、且本 skill 此前未覆盖，吸收如下。
-
-### 7.1 请求-响应关联（runId 配对）
-用 `runId` 把 `llm_input` 与 `llm_output` 关联，做完整请求-响应记录：
-```ts
-const inFlight = new Map<string, { ts: number; input: unknown }>();
-api.on("llm_input", (e) => inFlight.set(e.runId, { ts: Date.now(), input: e }));
-api.on("llm_output", (e) => {
-  const req = inFlight.get(e.runId);
-  // req 存在即配对成功，可记录完整 input/output/usage/duration
-  inFlight.delete(e.runId);
-});
-```
-
-### 7.2 JSONL 日志（按日期分文件）
-```ts
-const logPath = path.join(basePath, `${new Date().toISOString().split('T')[0]}.jsonl`);
-fs.appendFileSync(logPath, JSON.stringify(entry) + "\n");
-```
-
-### 7.3 配置合并（默认值 + 用户配置）
-```ts
-const DEFAULT_CONFIG = { enabled: true, logPath: "~/.openclaw/logs/plugin-name" };
-const config = { ...DEFAULT_CONFIG, ...rawConfig };
-```
-
-### 7.4 `llm_output` 可能不触发（中断场景）
-`llm_output` 依赖会话正常结束；若会话被中断（gateway 重启、用户发新消息），它可能**不触发**。需为中断场景设计（如清理 `inFlight` Map、避免资源泄漏）。
-
-> 来源：社区 skill `openclaw-plugin-dev`（ClawHub 裸 slug，作者 cicadaFang，v1.0.0）。仅运行期模式被吸收；其 manifest / 入口示例已过时，以本 skill 的 `plugin-forms-and-manifest.md` 为准。
